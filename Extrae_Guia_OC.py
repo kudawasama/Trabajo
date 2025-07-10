@@ -9,17 +9,20 @@ st.title("📦 Extraer Guía de Despacho y Orden de Compra desde Excel")
 # Diccionario de reemplazos
 REEMPLAZOS = {
     " ": "",
-    "Ordendecompra:OC-3": "Ordendecompra:OC-03",
-    "Ordendecompra:OC03": "Ordendecompra:OC-03",
-    "Ordendecompra:OC3": "Ordendecompra:OC-03",
-    "Ordendecompra:03": "Ordendecompra:OC-03",
-    "Ordendecompra:3": "Ordendecompra:OC-03",
-    "Ordendecompra:oc": "Ordendecompra:OC",
-    "Ordendecompra:OC-2": "Ordendecompra:OC-02",
-    "Ordendecompra:OC02": "Ordendecompra:OC-02",
-    "Ordendecompra:OC2": "Ordendecompra:OC-02",
-    "Ordendecompra:02": "Ordendecompra:OC-02",
-    "Ordendecompra:2": "Ordendecompra:OC-02",
+    "OC:OC:":    "OC",
+    "Nª":    "",
+    "Ordendecompra:OC-3":    "Ordendecompra:OC-03",
+    "Ordendecompra:OC03":    "Ordendecompra:OC-03",
+    "Ordendecompra:OC3":    "Ordendecompra:OC-03",
+    "Ordendecompra:03":    "Ordendecompra:OC-03",
+    "Ordendecompra:3":    "Ordendecompra:OC-03",
+    "Ordendecompra:oc":    "Ordendecompra:OC",
+    "Ordendecompra:OC-2":    "Ordendecompra:OC-02",
+    "Ordendecompra:OC02":    "Ordendecompra:OC-02",
+    "Ordendecompra:OC2":    "Ordendecompra:OC-02",
+    "Ordendecompra:02":    "Ordendecompra:OC-02",
+    "Ordendecompra:2":    "Ordendecompra:OC-02",
+        
 }
 
 # Función para reemplazo múltiple
