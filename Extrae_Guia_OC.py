@@ -65,7 +65,7 @@ if archivo:
     df = df.applymap(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
 
     # Procesar sobre la primera columna
-    col_base = df.columns[0]
+    col_base = df.columns[18]
     df["Guía Extraída"] = df[col_base].apply(extraer_guia)
     df["OC Extraída"] = df[col_base].apply(extraer_oc)
 
