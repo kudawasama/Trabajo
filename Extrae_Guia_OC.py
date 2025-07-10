@@ -56,7 +56,7 @@ def extraer_oc(texto):
         return ""
 
 # Interfaz
-archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
+archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx) Procura que Referencias esten en la primera columna (Columna A)", type="xlsx")
 
 if archivo:
     df = pd.read_excel(archivo)
