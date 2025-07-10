@@ -14,6 +14,7 @@ REEMPLAZOS = {
     "Ordendecompra:OC3": "Ordendecompra:OC-03",
     "Ordendecompra:03": "Ordendecompra:OC-03",
     "Ordendecompra:3": "Ordendecompra:OC-03",
+    "Ordendecompra:oc": "Ordendecompra:OC",
     "Ordendecompra:OC-2": "Ordendecompra:OC-02",
     "Ordendecompra:OC02": "Ordendecompra:OC-02",
     "Ordendecompra:OC2": "Ordendecompra:OC-02",
@@ -45,6 +46,26 @@ def extraer_guia(texto):
     fin = inicio + match.start() if match else len(texto)
     return texto[inicio:fin]
 
+
+
+# Función para extraer referencia Factura de Nota de credito. Incluye NC de las Notas de Debito.
+def extraer_ref_factura(texto):
+    if not isinstance(texto, str):
+        return ""
+    claves = ["Facturaelectrónica:", "Notadecréditoelectrónica:"]
+    for clave in claves:
+        pos = texto.find(clave)
+        if pos != -1:
+            inicio = pos + len(clave)
+            break
+    else:
+        return ""
+    caracteres_fin = r'[.,\s\-\/;!@#$%^&*\(\)_+=\[\]\{\}\|":<>\?`~]'
+    match = re.search(caracteres_fin, texto[inicio:])
+    fin = inicio + match.start() if match else len(texto)
+    return texto[inicio:fin]
+
+
 # Función para extraer OC
 def extraer_oc(texto):
     if not isinstance(texto, str):
@@ -68,6 +89,7 @@ if archivo:
     col_base = df.columns[18]
     df["Guía Extraída"] = df[col_base].apply(extraer_guia)
     df["OC Extraída"] = df[col_base].apply(extraer_oc)
+    df["Ref NC/ND Extraída"] = df[col_base].apply(extraer_ref_factura)
 
     st.success("✅ Archivo procesado correctamente.")
     st.dataframe(df.head(20), use_container_width=True)
