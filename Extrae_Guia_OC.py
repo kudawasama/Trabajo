@@ -1,41 +1,40 @@
 import streamlit as st
 import pandas as pd
 import re
+import sqlite3
 from io import BytesIO
 from PIL import Image
 
 st.set_page_config(page_title="Extrae by Jose", layout="wide")
 st.title("📦 Extraer Referencias de I-Construye desde Excel")
-st.markdown("---")  # Línea divisoria opcional
-
+st.markdown("---")
 
 # Diccionario de reemplazos
 REEMPLAZOS = {
     " ": "",
-    "OC:OC:":    "OC",
-    "Nª":    "",
-    "Ordendecompra:OC-3":    "Ordendecompra:OC-03",
-    "Ordendecompra:OC03":    "Ordendecompra:OC-03",
-    "Ordendecompra:OC3":    "Ordendecompra:OC-03",
-    "Ordendecompra:03":    "Ordendecompra:OC-03",
-    "Ordendecompra:3":    "Ordendecompra:OC-03",
-    "Ordendecompra:oc":    "Ordendecompra:OC",
-    "Ordendecompra:OC-2":    "Ordendecompra:OC-02",
-    "Ordendecompra:OC02":    "Ordendecompra:OC-02",
-    "Ordendecompra:OC2":    "Ordendecompra:OC-02",
-    "Ordendecompra:02":    "Ordendecompra:OC-02",
-    "Ordendecompra:2":    "Ordendecompra:OC-02",
-        
+    "OC:OC:": "OC",
+    "Nª": "",
+    "Ordendecompra:OC-3": "Ordendecompra:OC-03",
+    "Ordendecompra:OC03": "Ordendecompra:OC-03",
+    "Ordendecompra:OC3": "Ordendecompra:OC-03",
+    "Ordendecompra:03": "Ordendecompra:OC-03",
+    "Ordendecompra:3": "Ordendecompra:OC-03",
+    "Ordendecompra:oc": "Ordendecompra:OC",
+    "Ordendecompra:OC-2": "Ordendecompra:OC-02",
+    "Ordendecompra:OC02": "Ordendecompra:OC-02",
+    "Ordendecompra:OC2": "Ordendecompra:OC-02",
+    "Ordendecompra:02": "Ordendecompra:OC-02",
+    "Ordendecompra:2": "Ordendecompra:OC-02",
 }
 
-# Función para reemplazo múltiple
+# Funciones de procesamiento
 def reemplazar_varios(texto, reemplazos):
     for buscar, nuevo in reemplazos.items():
         if buscar in texto:
             texto = texto.replace(buscar, nuevo)
     return texto
 
-# Función para extraer guía
+#Extrae Guia
 def extraer_guia(texto):
     if not isinstance(texto, str):
         return ""
@@ -52,13 +51,11 @@ def extraer_guia(texto):
     fin = inicio + match.start() if match else len(texto)
     return texto[inicio:fin]
 
-
-
-# Función para extraer referencia Factura de Nota de credito. Incluye NC de las Notas de Debito.
+#extrae Referencia de NC y ND
 def extraer_ref_factura(texto):
     if not isinstance(texto, str):
         return ""
-    claves = ["Facturaelectrónica:", "Notadecréditoelectrónica:"]
+    claves = ["Facturaelectrónica:", "Notadecréditoelectrónica:", "Facturaelectrónicanoafectaoexenta:"]
     for clave in claves:
         pos = texto.find(clave)
         if pos != -1:
@@ -71,8 +68,7 @@ def extraer_ref_factura(texto):
     fin = inicio + match.start() if match else len(texto)
     return texto[inicio:fin]
 
-
-# Función para extraer OC
+#Extrae la Orden de compra
 def extraer_oc(texto):
     if not isinstance(texto, str):
         return ""
@@ -82,64 +78,92 @@ def extraer_oc(texto):
     except ValueError:
         return ""
 
-# Interfaz
+def guardar_en_base(df, nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
+    try:
+        conn = sqlite3.connect(base_datos)
+        # Definir columnas clave para detectar duplicados, cambia según tu DataFrame
+        columnas_clave = ["OC Extraída", "Guía Extraída", "Ref NC/ND Extraída"]
+        
+        # Eliminar duplicados basados en columnas clave
+        df_sin_duplicados = df.drop_duplicates(subset=columnas_clave)
+        
+        # Guardar en SQLite, agregando datos
+        df_sin_duplicados.to_sql(nombre_tabla, conn, if_exists="append", index=False)
+        conn.close()
+        st.info(f"📦 Datos guardados en la base '{base_datos}', tabla '{nombre_tabla}'.")
+    except Exception as e:
+        st.error(f"❌ Error al guardar en base de datos: {e}")
+
+
+# Cargar archivo Excel
 archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
 
 if archivo:
     df = pd.read_excel(archivo)
 
-
-    # Aplicar todos los reemplazos del diccionario solo en la columna 18
+    # Normalizar datos
     col_base = df.columns[18]
     df[col_base] = df[col_base].apply(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
- 
 
-   
-
-    # Procesar sobre la primera columna
-    col_base = df.columns[18]
     df["Guía Extraída"] = df[col_base].apply(extraer_guia)
     df["OC Extraída"] = df[col_base].apply(extraer_oc)
     df["Ref NC/ND Extraída"] = df[col_base].apply(extraer_ref_factura)
 
     st.success("✅ Archivo procesado correctamente.")
     st.dataframe(df.head(20), use_container_width=True)
-    
 
+    guardar_en_base(df)
 
-
-    # Botón de descarga
+    # Botón descarga
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
-
     st.download_button(
         label="📥 Descargar archivo procesado",
         data=buffer,
         file_name="resultado_extraccion.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-# Mostrar README al final
-st.markdown("---")  # Línea divisoria opcional
+
+# Ver base de datos (navegar)
+st.markdown("---")
+if st.button("🔍 Ver Base de Datos"):
+    st.switch_page("pages/ver_base_datos.py")  # si está en carpeta /pages/
+
+# Instrucciones
 st.subheader("📄 Instrucciones a considerar")
 st.success("Procura habilitar el archivo Excel descargado desde I-Construye antes de subirlo.")
 
-
-# Crear columnas
+# Imágenes guía
 col1, col2, col3 = st.columns(3)
-
-# Mostrar imágenes en columnas
 with col1:
-    imagen = Image.open("Numero_1.png")
-    st.image(imagen, caption="Paso 1", use_container_width=True)
-    st.info("Descarga el archivo DTE y abrelo")
-
+    st.image("Numero_1.png", caption="Paso 1", use_container_width=True)
+    st.info("Descarga el archivo DTE y ábrelo")
 with col2:
-    imagen = Image.open("Numero_2.png")
-    st.image(imagen, caption="Paso 2", use_container_width=True)
-    st.info("presiona en HABILITAR en la parte superior del Excel")
-
+    st.image("Numero_2.png", caption="Paso 2", use_container_width=True)
+    st.info("Presiona HABILITAR en la parte superior del Excel")
 with col3:
-    imagen = Image.open("Numero_3.png")
-    st.image(imagen, caption="Paso 3", use_container_width=True)
-    st.info("Guarda el archivo una vez habilitado con Ctrl + G y cierralo")
+    st.image("Numero_3.png", caption="Paso 3", use_container_width=True)
+    st.info("Guarda el archivo con Ctrl+G y ciérralo")
+
+
+def eliminar_duplicados_sqlite(nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
+    try:
+        conn = sqlite3.connect(base_datos)
+        # Cargar toda la tabla a DataFrame
+        df = pd.read_sql(f"SELECT * FROM {nombre_tabla}", conn)
+
+        # Eliminar duplicados según columnas clave
+        columnas_clave = ["OC Extraída", "Guía Extraída", "Ref NC/ND Extraída"]
+        df_limpio = df.drop_duplicates(subset=columnas_clave)
+
+        # Sobrescribir la tabla con datos sin duplicados
+        df_limpio.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
+        conn.close()
+        st.success("✅ Duplicados eliminados correctamente de la base de datos.")
+    except Exception as e:
+        st.error(f"❌ Error al eliminar duplicados: {e}")
+        
+st.markdown("---")
+if st.button("🧹 Eliminar duplicados de la base de datos"):
+    eliminar_duplicados_sqlite()
