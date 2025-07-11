@@ -104,7 +104,12 @@ if archivo:
     # Normalizar datos
     col_base = df.columns[18]
     df[col_base] = df[col_base].apply(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
+ 
 
+   
+
+    # Procesar sobre la primera columna
+    col_base = df.columns[18]
     df["Guía Extraída"] = df[col_base].apply(extraer_guia)
     df["OC Extraída"] = df[col_base].apply(extraer_oc)
     df["Ref NC/ND Extraída"] = df[col_base].apply(extraer_ref_factura)
@@ -143,27 +148,6 @@ with col2:
     st.image("Numero_2.png", caption="Paso 2", use_container_width=True)
     st.info("Presiona HABILITAR en la parte superior del Excel")
 with col3:
-    st.image("Numero_3.png", caption="Paso 3", use_container_width=True)
-    st.info("Guarda el archivo con Ctrl+G y ciérralo")
-
-
-def eliminar_duplicados_sqlite(nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
-    try:
-        conn = sqlite3.connect(base_datos)
-        # Cargar toda la tabla a DataFrame
-        df = pd.read_sql(f"SELECT * FROM {nombre_tabla}", conn)
-
-        # Eliminar duplicados según columnas clave
-        columnas_clave = ["OC Extraída", "Guía Extraída", "Ref NC/ND Extraída"]
-        df_limpio = df.drop_duplicates(subset=columnas_clave)
-
-        # Sobrescribir la tabla con datos sin duplicados
-        df_limpio.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
-        conn.close()
-        st.success("✅ Duplicados eliminados correctamente de la base de datos.")
-    except Exception as e:
-        st.error(f"❌ Error al eliminar duplicados: {e}")
-        
-st.markdown("---")
-if st.button("🧹 Eliminar duplicados de la base de datos"):
-    eliminar_duplicados_sqlite()
+    imagen = Image.open("Numero_3.png")
+    st.image(imagen, caption="Paso 3", use_container_width=True)
+    st.info("Guarda el archivo una vez habilitado con Ctrl + G y cierralo")
