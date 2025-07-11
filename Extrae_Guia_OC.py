@@ -88,8 +88,19 @@ archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
 if archivo:
     df = pd.read_excel(archivo)
 
-    # Reemplazos en todo el archivo
-    df = df.applymap(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
+
+# Copia del diccionario sin el reemplazo de espacios
+    REEMPLAZOS_SIN_ESPACIOS = {k: v for k, v in REEMPLAZOS.items() if k != " "}
+
+# Reemplazos en todo el archivo excepto el espacio
+    df = df.applymap(lambda x: reemplazar_varios(x, REEMPLAZOS_SIN_ESPACIOS) if isinstance(x, str) else x)
+
+#   Reemplazo de espacios solo en la columna 18
+    col_base = df.columns[18]
+    df[col_base] = df[col_base].apply(lambda x: x.replace(" ", "") if isinstance(x, str) else x)
+
+
+    
 
     # Procesar sobre la primera columna
     col_base = df.columns[18]
