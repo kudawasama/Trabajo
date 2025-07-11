@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 import re
 from io import BytesIO
+from PIL import Image
 
 st.set_page_config(page_title="Extrae by Jose", layout="wide")
 st.title("📦 Extraer Referencias de I-Construye desde Excel")
+st.markdown("---")  # Línea divisoria opcional
+
 
 # Diccionario de reemplazos
 REEMPLAZOS = {
@@ -96,6 +99,9 @@ if archivo:
 
     st.success("✅ Archivo procesado correctamente.")
     st.dataframe(df.head(20), use_container_width=True)
+    
+
+
 
     # Botón de descarga
     buffer = BytesIO()
@@ -108,3 +114,27 @@ if archivo:
         file_name="resultado_extraccion.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+# Mostrar README al final
+st.markdown("---")  # Línea divisoria opcional
+st.subheader("📄 Instrucciones a considerar")
+st.success("Procura habilitar el archivo Excel descargado desde I-Construye antes de subirlo.")
+
+
+# Crear columnas
+col1, col2, col3 = st.columns(3)
+
+# Mostrar imágenes en columnas
+with col1:
+    imagen = Image.open("Numero_1.png")
+    st.image(imagen, caption="Paso 1", use_container_width=True)
+    st.info("Descarga el archivo DTE y abrelo")
+
+with col2:
+    imagen = Image.open("Numero_2.png")
+    st.image(imagen, caption="Paso 2", use_container_width=True)
+    st.info("presiona en HABILITAR en la parte superior del Excel")
+
+with col3:
+    imagen = Image.open("Numero_3.png")
+    st.image(imagen, caption="Paso 3", use_container_width=True)
+    st.info("Guarda el archivo una vez habilitado con Ctrl + G y cierralo")
