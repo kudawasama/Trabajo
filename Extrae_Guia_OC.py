@@ -3,8 +3,8 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="Extraer Guía y OC", layout="wide")
-st.title("📦 Extraer Guía de Despacho y Orden de Compra desde Excel")
+st.set_page_config(page_title="Extrae by Jose", layout="wide")
+st.title("📦 Extraer Referencias de I-Construye desde Excel")
 
 # Diccionario de reemplazos
 REEMPLAZOS = {
