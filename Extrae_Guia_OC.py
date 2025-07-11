@@ -96,7 +96,7 @@ if archivo:
 
    
 
-    # Procesar sobre la primera columna
+    # Procesar sobre la columna 18 "Referencias"
     col_base = df.columns[18]
     df["Guía Extraída"] = df[col_base].apply(extraer_guia)
     df["OC Extraída"] = df[col_base].apply(extraer_oc)
