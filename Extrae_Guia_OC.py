@@ -9,7 +9,7 @@ st.set_page_config(page_title="Extrae by Jose", layout="wide")
 st.title("📦 Extraer Referencias de I-Construye desde Excel")
 st.markdown("---")
 
-# Diccionario de reemplazos
+# Diccionario de reemplazos para normalizar texto en columna base
 REEMPLAZOS = {
     " ": "",
     "OC:OC:": "OC",
@@ -27,20 +27,20 @@ REEMPLAZOS = {
     "Ordendecompra:2": "Ordendecompra:OC-02",
 }
 
-# Función de reemplazo múltiple
+# Función para aplicar múltiples reemplazos en un texto
 def reemplazar_varios(texto, reemplazos):
     for buscar, nuevo in reemplazos.items():
         if buscar in texto:
             texto = texto.replace(buscar, nuevo)
     return texto
 
-# Extraer múltiples guías
+# Extraer múltiples guías con regex
 def extraer_guias(texto):
     if not isinstance(texto, str):
         return []
-    return re.findall(r"Guíadedespachoelectrónica:(\d+)", texto)
+    return [int(g) for g in re.findall(r"Guíadedespachoelectrónica:(\d+)", texto)]
 
-# Extraer múltiples facturas
+# Extraer múltiples facturas (incluye NC/ND) con regex
 def extraer_facturas(texto):
     if not isinstance(texto, str):
         return []
@@ -51,43 +51,32 @@ def extraer_facturas(texto):
     ]
     resultados = []
     for patron in patrones:
-        resultados.extend(re.findall(patron, texto))
+        resultados.extend([int(x) for x in re.findall(patron, texto)])
     return resultados
 
-# Extraer múltiples OCs
+# Extraer múltiples OCs con regex (mantener como str)
 def extraer_oc(texto):
     if not isinstance(texto, str):
         return []
     return re.findall(r"(OC-\d{2,8})", texto)
 
-# Guardar en base SQLite
+# Guardar DataFrame directamente en base SQLite, sin eliminar duplicados
 def guardar_en_base(df, nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
     try:
         conn = sqlite3.connect(base_datos)
-
-        # 🔥 Esto elimina la tabla anterior (si existe)
         conn.execute(f"DROP TABLE IF EXISTS {nombre_tabla}")
-
-        # Eliminar duplicados según columnas clave
-        columnas_clave = ["OC Extraída", "Guía Extraída", "Ref NC/ND Extraída"]
-        df_sin_duplicados = df.drop_duplicates(subset=columnas_clave)
-
-        # Crear nueva tabla con los datos actuales
-        df_sin_duplicados.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
-
+        df.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
         conn.close()
         st.info(f"📦 Datos guardados en la base '{base_datos}', tabla '{nombre_tabla}'.")
     except Exception as e:
         st.error(f"❌ Error al guardar en base de datos: {e}")
 
-
-# Cargar archivo
+# Widget para cargar archivo Excel
 archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
 
 if archivo:
     df = pd.read_excel(archivo)
 
-    # Detectar tipo de documento desde columna 2 (índice 1)
     def detectar_tipo_documento(tipo):
         if not isinstance(tipo, str):
             return "Otro"
@@ -103,14 +92,11 @@ if archivo:
 
     df["Tipo Documento"] = df.iloc[:, 1].apply(detectar_tipo_documento)
 
-    # Normalizar columna base (col 18)
     col_base = df.columns[18]
     df[col_base] = df[col_base].apply(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
 
-    # Lista para filas nuevas
     filas_expandidas = []
 
-    # Recorrer filas y aplicar extracción por tipo
     for _, fila in df.iterrows():
         tipo = fila["Tipo Documento"]
         texto = fila[col_base]
@@ -171,7 +157,6 @@ if archivo:
             nueva_fila["OC Extraída"] = ""
             filas_expandidas.append(nueva_fila)
 
-    # Crear DataFrame expandido
     df_expandido = pd.DataFrame(filas_expandidas)
 
     st.success("✅ Archivo procesado correctamente.")
@@ -179,7 +164,6 @@ if archivo:
 
     guardar_en_base(df_expandido)
 
-    # Descargar archivo
     buffer = BytesIO()
     df_expandido.to_excel(buffer, index=False)
     buffer.seek(0)
@@ -190,16 +174,13 @@ if archivo:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# Ver base de datos (navegar)
 st.markdown("---")
 if st.button("🔍 Ver Base de Datos"):
     st.switch_page("pages/ver_base_datos.py")
 
-# Instrucciones
 st.subheader("📄 Instrucciones a considerar")
 st.success("Procura habilitar el archivo Excel descargado desde I-Construye antes de subirlo.")
 
-# Imágenes guía
 col1, col2, col3 = st.columns(3)
 with col1:
     st.image("Numero_1.png", caption="Paso 1", use_container_width=True)

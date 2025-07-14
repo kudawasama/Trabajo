@@ -6,24 +6,7 @@ from io import BytesIO
 st.set_page_config(page_title="Ver Base de Datos", layout="wide")
 st.title("📊 Ver Base de Datos")
 
-# === Eliminar duplicados ===
-def eliminar_duplicados_sqlite(nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
-    try:
-        conn = sqlite3.connect(base_datos)
-        df = pd.read_sql(f"SELECT * FROM {nombre_tabla}", conn)
-        columnas_clave = ["OC Extraída", "Guía Extraída", "Ref NC/ND Extraída"]
-        df_limpio = df.drop_duplicates(subset=columnas_clave)
-        df_limpio.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
-        conn.close()
-        st.success("✅ Duplicados eliminados correctamente.")
-    except Exception as e:
-        st.error(f"❌ Error al eliminar duplicados: {e}")
-
-st.markdown("---")
-if st.button("🧹 Eliminar duplicados de la base de datos"):
-    eliminar_duplicados_sqlite()
-
-# === Cargar base desde SQLite ===
+# === Cargar base de datos ===
 def cargar_base(nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
     try:
         conn = sqlite3.connect(base_datos)
@@ -34,9 +17,7 @@ def cargar_base(nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
         st.error(f"Error al cargar la base: {e}")
         return pd.DataFrame()
 
-df = cargar_base()
-
-# === Validación de integridad ===
+# === Validación de integridad con concatenado Rut+Folio ===
 def validar_referencias(df):
     errores = []
 
@@ -45,122 +26,144 @@ def validar_referencias(df):
             return ""
         return str(valor).strip().upper()
 
-    facturas = df[df["Tipo Documento"].str.lower().str.contains("factura")]
-    guias = df[df["Tipo Documento"].str.lower().str.contains("guía")]
-    notas = df[df["Tipo Documento"].str.lower().str.contains("nota")]
+    if "Tipo Documento" not in df.columns or "Folio" not in df.columns or "Rut Emisor" not in df.columns:
+        st.warning("⚠️ Faltan columnas necesarias para validar (Tipo Documento, Folio o Rut Emisor).")
+        return pd.DataFrame()
 
-    facturas_ids = set(facturas["Ref NC/ND Extraída"].apply(normalizar))
+    # Normalizar folios a texto sin decimales
+    df["Folio"] = df["Folio"].apply(lambda x: str(int(float(x))) if pd.notna(x) and str(x).replace(".", "").isdigit() else "")
+    df["Ref NC/ND Extraída"] = df["Ref NC/ND Extraída"].apply(lambda x: str(int(float(x))) if pd.notna(x) and str(x).replace(".", "").isdigit() else "")
+
+    facturas = df[df["Tipo Documento"].str.lower().str.contains("factura", na=False)]
+    guias = df[df["Tipo Documento"].str.lower().str.contains("guía", na=False)]
+    notas = df[df["Tipo Documento"].str.lower().str.contains("nota", na=False)]
+
     guias_ids = set(guias["Guía Extraída"].apply(normalizar))
     oc_ids = set(df["OC Extraída"].apply(normalizar))
 
+    # Crear columnas de concatenado: Rut + Folio
+    facturas["Factura_RutFolio"] = facturas.apply(
+        lambda x: f"{normalizar(x['Rut Emisor'])}_{normalizar(x['Folio'])}", axis=1
+    )
+    notas["NC_RutRef"] = notas.apply(
+        lambda x: f"{normalizar(x['Rut Emisor'])}_{normalizar(x['Ref NC/ND Extraída'])}", axis=1
+    )
+
+    factura_rutfolios = set(facturas["Factura_RutFolio"])
+
+    # Validación NC/ND
     for _, fila in notas.iterrows():
-        ref_factura = normalizar(fila["Ref NC/ND Extraída"])
-        if ref_factura and ref_factura not in facturas_ids:
+        ref_concat = fila["NC_RutRef"]
+        if ref_concat and ref_concat not in factura_rutfolios:
             errores.append({
-                "Línea": fila.name + 2,
+                "Folio": fila["Folio"],
                 "Tipo": fila["Tipo Documento"],
-                "Referencia": ref_factura,
-                "Problema": "❌ No se encontró la factura referenciada"
+                "Referencia": fila["Ref NC/ND Extraída"],
+                "Problema": "❌ NC/ND no coincide con ninguna Factura del mismo RUT"
             })
 
+    # Validación Guías
     for _, fila in guias.iterrows():
         ref_oc = normalizar(fila["OC Extraída"])
         if ref_oc and ref_oc not in oc_ids:
             errores.append({
-                "Línea": fila.name + 2,
+                "Folio": fila["Folio"],
                 "Tipo": fila["Tipo Documento"],
                 "Referencia": ref_oc,
                 "Problema": "❌ Guía referencia una OC inexistente"
             })
 
+    # Validación Facturas
     for _, fila in facturas.iterrows():
         ref_guia = normalizar(fila["Guía Extraída"])
         if ref_guia and ref_guia not in guias_ids:
             errores.append({
-                "Línea": fila.name + 2,
+                "Folio": fila["Folio"],
                 "Tipo": fila["Tipo Documento"],
                 "Referencia": ref_guia,
                 "Problema": "❌ Factura referencia una guía inexistente"
             })
 
+        oc_factura = normalizar(fila["OC Extraída"])
+        oc_guia = ""
+        if ref_guia in guias_ids:
+            oc_guia = normalizar(guias.loc[guias["Guía Extraída"] == ref_guia, "OC Extraída"].values[0])
+        if ref_guia and oc_factura and oc_guia and oc_factura != oc_guia:
+            errores.append({
+                "Folio": fila["Folio"],
+                "Tipo": fila["Tipo Documento"],
+                "Referencia": ref_guia,
+                "Problema": "❌ OC de la Guía no coincide con OC de la Factura"
+            })
+
     return pd.DataFrame(errores)
 
-# === Mostrar errores si existen ===
+# === Carga de datos ===
+df = cargar_base()
+
 if not df.empty:
-    df_errores = validar_referencias(df)
-
-    if not df_errores.empty:
-        st.error("🚨 Se encontraron problemas de integridad en las referencias:")
-        st.dataframe(df_errores, use_container_width=True)
-    else:
-        st.success("✅ Todas las referencias entre documentos son coherentes.")
-
-    # === Filtros avanzados ===
-    columnas = df.columns
-    columnas_lower = list(map(str.lower, columnas))
-
-    fecha_col = None  # Definir por si no existe
+    # Convertir fecha emisión a datetime
+    try:
+        fecha_col = df.columns[7]
+        df[fecha_col] = pd.to_datetime(df[fecha_col], errors='coerce')
+        df["Fecha Formateada"] = df[fecha_col].dt.strftime("%d-%m-%Y")
+    except Exception as e:
+        st.warning("⚠️ No se pudo procesar la fecha.")
+        df["Fecha Formateada"] = ""
 
     with st.expander("🔎 Filtros avanzados"):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            filtro_oc = st.text_input("🔍 Filtrar por OC")
+            filtro_folio = st.text_input("🔍 Filtrar por Folio")
         with col2:
-            filtro_guia = st.text_input("🔍 Filtrar por Guía")
+            filtro_proveedor = st.text_input("🔍 Filtrar por Proveedor")
         with col3:
-            filtro_factura = st.text_input("🔍 Filtrar por Ref NC/ND")
+            tipos_disponibles = df["Tipo Documento"].dropna().unique().tolist()
+            filtro_tipo = st.selectbox("🔍 Filtrar por Tipo", options=["Todos"] + tipos_disponibles)
         with col4:
-            try:
-                fecha_col = df.columns[7]
-                df[fecha_col] = pd.to_datetime(df[fecha_col], errors='coerce')
-                fecha_min = df[fecha_col].min()
-                fecha_max = df[fecha_col].max()
-                rango_fechas = st.date_input("📅 Filtrar por fecha de emisión", [fecha_min, fecha_max])
-            except:
-                rango_fechas = None
+            rango_fechas = st.date_input(
+                "📅 Filtrar por Fecha Emisión",
+                [df[fecha_col].min(), df[fecha_col].max()] if not df[fecha_col].isnull().all() else None
+            )
 
-    # === Aplicar filtros ===
-    if filtro_oc:
-        df = df[df["OC Extraída"].str.contains(filtro_oc, na=False, case=False)]
-    if filtro_guia:
-        df = df[df["Guía Extraída"].str.contains(filtro_guia, na=False, case=False)]
-    if filtro_factura:
-        df = df[df["Ref NC/ND Extraída"].str.contains(filtro_factura, na=False, case=False)]
+    # Aplicar filtros
+    if filtro_folio:
+        df = df[df["Folio"].astype(str).str.contains(filtro_folio, case=False, na=False)]
+    if filtro_proveedor and "Razón Social Emisor" in df.columns:
+        df = df[df["Razón Social Emisor"].astype(str).str.contains(filtro_proveedor, case=False, na=False)]
+    if filtro_tipo != "Todos":
+        df = df[df["Tipo Documento"] == filtro_tipo]
+    if rango_fechas and isinstance(rango_fechas, list) and len(rango_fechas) == 2:
+        df = df[(df[fecha_col] >= pd.to_datetime(rango_fechas[0])) & (df[fecha_col] <= pd.to_datetime(rango_fechas[1]))]
 
-    # Filtrar por fecha usando columna fija: índice 7 = "Fecha Emisión"
-    try:
-        fecha_col = df.columns[7]
-        df[fecha_col] = pd.to_datetime(df[fecha_col], errors='coerce')
+    st.dataframe(df.drop(columns=[fecha_col]) if fecha_col in df.columns else df, use_container_width=True)
 
-        if rango_fechas:
-            df = df[
-                (df[fecha_col] >= pd.to_datetime(rango_fechas[0])) &
-                (df[fecha_col] <= pd.to_datetime(rango_fechas[1]))
-            ]
-
-        # Mostrar la fecha en formato DD-MM-AA (después de filtrar)
-        df[fecha_col] = df[fecha_col].dt.strftime('%d-%m-%y')
-
-    except Exception as e:
-        st.warning(f"⚠️ Error al procesar el filtro de fecha: {e}")
-
-
-
-    st.dataframe(df, use_container_width=True)
-
-    # === Descargar Excel ===
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
-    st.download_button(
-        label="📥 Exportar base como Excel",
-        data=buffer,
-        file_name="base_datos_filtrada.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    st.download_button("📥 Exportar base como Excel", buffer, "base_datos_filtrada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    st.markdown("---")
+    st.subheader("🧠 Validación de Integridad de Referencias")
+    if st.button("🔄 Actualizar Validación"):
+        errores_df = validar_referencias(df)
+    else:
+        errores_df = validar_referencias(df)
+
+    if errores_df.empty:
+        st.success("✅ Todas las referencias son válidas.")
+    else:
+        st.warning("⚠️ Se encontraron referencias inválidas:")
+        st.dataframe(errores_df, use_container_width=True)
+
+        buffer_errores = BytesIO()
+        errores_df.to_excel(buffer_errores, index=False)
+        buffer_errores.seek(0)
+        st.download_button("📥 Descargar errores como Excel", buffer_errores, "errores_integridad.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 else:
     st.warning("⚠️ No hay datos en la base.")
 
 st.markdown("---")
 if st.button("🔙 Volver al inicio"):
-    st.info("Usa el menú lateral (izquierda) para volver a la página principal.")
+    st.info("Usa el menú lateral para volver a la página principal.")
