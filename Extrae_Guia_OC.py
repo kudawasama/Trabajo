@@ -27,101 +27,161 @@ REEMPLAZOS = {
     "Ordendecompra:2": "Ordendecompra:OC-02",
 }
 
-# Funciones de procesamiento
+# Función de reemplazo múltiple
 def reemplazar_varios(texto, reemplazos):
     for buscar, nuevo in reemplazos.items():
         if buscar in texto:
             texto = texto.replace(buscar, nuevo)
     return texto
 
-#Extrae Guia
-def extraer_guia(texto):
+# Extraer múltiples guías
+def extraer_guias(texto):
     if not isinstance(texto, str):
-        return ""
-    claves = ["Guíadedespachoelectrónica:", "Guíadedespacho:"]
-    for clave in claves:
-        pos = texto.find(clave)
-        if pos != -1:
-            inicio = pos + len(clave)
-            break
-    else:
-        return ""
-    caracteres_fin = r'[.,\s\-\/;!@#$%^&*\(\)_+=\[\]\{\}\|":<>\?`~]'
-    match = re.search(caracteres_fin, texto[inicio:])
-    fin = inicio + match.start() if match else len(texto)
-    return texto[inicio:fin]
+        return []
+    return re.findall(r"Guíadedespachoelectrónica:(\d+)", texto)
 
-#extrae Referencia de NC y ND
-def extraer_ref_factura(texto):
+# Extraer múltiples facturas
+def extraer_facturas(texto):
     if not isinstance(texto, str):
-        return ""
-    claves = ["Facturaelectrónica:", "Notadecréditoelectrónica:", "Facturaelectrónicanoafectaoexenta:"]
-    for clave in claves:
-        pos = texto.find(clave)
-        if pos != -1:
-            inicio = pos + len(clave)
-            break
-    else:
-        return ""
-    caracteres_fin = r'[.,\s\-\/;!@#$%^&*\(\)_+=\[\]\{\}\|":<>\?`~]'
-    match = re.search(caracteres_fin, texto[inicio:])
-    fin = inicio + match.start() if match else len(texto)
-    return texto[inicio:fin]
+        return []
+    patrones = [
+        r"Facturaelectrónica:(\d+)",
+        r"Notadecréditoelectrónica:(\d+)",
+        r"Facturaelectrónicanoafectaoexenta:(\d+)"
+    ]
+    resultados = []
+    for patron in patrones:
+        resultados.extend(re.findall(patron, texto))
+    return resultados
 
-#Extrae la Orden de compra
+# Extraer múltiples OCs
 def extraer_oc(texto):
     if not isinstance(texto, str):
-        return ""
-    try:
-        inicio = texto.index("OC-0")
-        return texto[inicio:inicio + 11]
-    except ValueError:
-        return ""
+        return []
+    return re.findall(r"(OC-\d{2,8})", texto)
 
+# Guardar en base SQLite
 def guardar_en_base(df, nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
     try:
         conn = sqlite3.connect(base_datos)
-        # Definir columnas clave para detectar duplicados, cambia según tu DataFrame
+
+        # 🔥 Esto elimina la tabla anterior (si existe)
+        conn.execute(f"DROP TABLE IF EXISTS {nombre_tabla}")
+
+        # Eliminar duplicados según columnas clave
         columnas_clave = ["OC Extraída", "Guía Extraída", "Ref NC/ND Extraída"]
-        
-        # Eliminar duplicados basados en columnas clave
         df_sin_duplicados = df.drop_duplicates(subset=columnas_clave)
-        
-        # Guardar en SQLite, agregando datos
-        df_sin_duplicados.to_sql(nombre_tabla, conn, if_exists="append", index=False)
+
+        # Crear nueva tabla con los datos actuales
+        df_sin_duplicados.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
+
         conn.close()
         st.info(f"📦 Datos guardados en la base '{base_datos}', tabla '{nombre_tabla}'.")
     except Exception as e:
         st.error(f"❌ Error al guardar en base de datos: {e}")
 
 
-# Cargar archivo Excel
+# Cargar archivo
 archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
 
 if archivo:
     df = pd.read_excel(archivo)
 
-    # Normalizar datos
+    # Detectar tipo de documento desde columna 2 (índice 1)
+    def detectar_tipo_documento(tipo):
+        if not isinstance(tipo, str):
+            return "Otro"
+        tipo = tipo.strip().lower()
+        if "guía" in tipo:
+            return "Guía"
+        elif "nota de crédito" in tipo or "nota de débito" in tipo:
+            return "NC/ND"
+        elif "factura" in tipo:
+            return "Factura"
+        else:
+            return "Otro"
+
+    df["Tipo Documento"] = df.iloc[:, 1].apply(detectar_tipo_documento)
+
+    # Normalizar columna base (col 18)
     col_base = df.columns[18]
     df[col_base] = df[col_base].apply(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
- 
 
-   
+    # Lista para filas nuevas
+    filas_expandidas = []
 
-    # Procesar sobre la primera columna
-    col_base = df.columns[18]
-    df["Guía Extraída"] = df[col_base].apply(extraer_guia)
-    df["OC Extraída"] = df[col_base].apply(extraer_oc)
-    df["Ref NC/ND Extraída"] = df[col_base].apply(extraer_ref_factura)
+    # Recorrer filas y aplicar extracción por tipo
+    for _, fila in df.iterrows():
+        tipo = fila["Tipo Documento"]
+        texto = fila[col_base]
+
+        guias = extraer_guias(texto) if tipo in ["Factura", "NC/ND"] else []
+        facturas = extraer_facturas(texto) if tipo == "NC/ND" else []
+        ocs = extraer_oc(texto) if tipo in ["Guía", "Factura", "NC/ND"] else []
+
+        if tipo == "Guía":
+            if not ocs:
+                nueva_fila = fila.copy()
+                nueva_fila["Guía Extraída"] = ""
+                nueva_fila["Ref NC/ND Extraída"] = ""
+                nueva_fila["OC Extraída"] = ""
+                filas_expandidas.append(nueva_fila)
+            else:
+                for oc in ocs:
+                    nueva_fila = fila.copy()
+                    nueva_fila["Guía Extraída"] = ""
+                    nueva_fila["Ref NC/ND Extraída"] = ""
+                    nueva_fila["OC Extraída"] = oc
+                    filas_expandidas.append(nueva_fila)
+
+        elif tipo == "Factura":
+            if not guias:
+                nueva_fila = fila.copy()
+                nueva_fila["Guía Extraída"] = ""
+                nueva_fila["Ref NC/ND Extraída"] = ""
+                nueva_fila["OC Extraída"] = ocs[0] if ocs else ""
+                filas_expandidas.append(nueva_fila)
+            else:
+                for guia in guias:
+                    nueva_fila = fila.copy()
+                    nueva_fila["Guía Extraída"] = guia
+                    nueva_fila["Ref NC/ND Extraída"] = ""
+                    nueva_fila["OC Extraída"] = ocs[0] if ocs else ""
+                    filas_expandidas.append(nueva_fila)
+
+        elif tipo == "NC/ND":
+            if not facturas:
+                nueva_fila = fila.copy()
+                nueva_fila["Ref NC/ND Extraída"] = ""
+                nueva_fila["Guía Extraída"] = guias[0] if guias else ""
+                nueva_fila["OC Extraída"] = ocs[0] if ocs else ""
+                filas_expandidas.append(nueva_fila)
+            else:
+                for factura in facturas:
+                    nueva_fila = fila.copy()
+                    nueva_fila["Ref NC/ND Extraída"] = factura
+                    nueva_fila["Guía Extraída"] = guias[0] if guias else ""
+                    nueva_fila["OC Extraída"] = ocs[0] if ocs else ""
+                    filas_expandidas.append(nueva_fila)
+
+        else:
+            nueva_fila = fila.copy()
+            nueva_fila["Guía Extraída"] = ""
+            nueva_fila["Ref NC/ND Extraída"] = ""
+            nueva_fila["OC Extraída"] = ""
+            filas_expandidas.append(nueva_fila)
+
+    # Crear DataFrame expandido
+    df_expandido = pd.DataFrame(filas_expandidas)
 
     st.success("✅ Archivo procesado correctamente.")
-    st.dataframe(df.head(20), use_container_width=True)
+    st.dataframe(df_expandido.head(20), use_container_width=True)
 
-    guardar_en_base(df)
+    guardar_en_base(df_expandido)
 
-    # Botón descarga
+    # Descargar archivo
     buffer = BytesIO()
-    df.to_excel(buffer, index=False)
+    df_expandido.to_excel(buffer, index=False)
     buffer.seek(0)
     st.download_button(
         label="📥 Descargar archivo procesado",
@@ -133,7 +193,7 @@ if archivo:
 # Ver base de datos (navegar)
 st.markdown("---")
 if st.button("🔍 Ver Base de Datos"):
-    st.switch_page("pages/ver_base_datos.py")  # si está en carpeta /pages/
+    st.switch_page("pages/ver_base_datos.py")
 
 # Instrucciones
 st.subheader("📄 Instrucciones a considerar")
@@ -150,4 +210,4 @@ with col2:
 with col3:
     imagen = Image.open("Numero_3.png")
     st.image(imagen, caption="Paso 3", use_container_width=True)
-    st.info("Guarda el archivo una vez habilitado con Ctrl + G y cierralo")
+    st.info("Guarda el archivo una vez habilitado con Ctrl + G y ciérralo")
