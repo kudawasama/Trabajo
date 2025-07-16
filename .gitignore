@@ -1,0 +1,16 @@
+# Ignorar base de datos
+facturas.db
+*.db
+
+# Ignorar carpetas de entorno virtual
+venv/
+.venv/
+env/
+
+# Ignorar caché de Python
+__pycache__/
+*.pyc
+
+# Ignorar archivos de configuración de IDE
+.vscode/
+.idea/
