@@ -35,6 +35,7 @@ REEMPLAZOS = {
     "Ordendecompra:OC2": "Ordendecompra:OC-02",
     "Ordendecompra:02": "Ordendecompra:OC-02",
     "Ordendecompra:2": "Ordendecompra:OC-02",
+    "Ordendecompra:0C": "Ordendecompra:OC",
 }
 
 # Funciones de procesamiento
