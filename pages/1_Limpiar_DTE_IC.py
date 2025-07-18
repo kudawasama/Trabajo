@@ -4,22 +4,18 @@ import pandas as pd
 import re 
 import sqlite3
 from io import BytesIO
-from PIL import Image # Importar Image para las imágenes de instrucciones
+from PIL import Image
 
-# No necesitas PIL.Image aquí a menos que tengas otras imágenes específicas de esta página
-# from PIL import Image # Ya no es necesario aquí si las imágenes de instrucciones están en Inicio.py
-
-# Configuración de la página (esto afectará la pestaña del navegador para esta página específica)
 st.set_page_config(
     page_title="Extraer Referencias",
     layout="wide",
-    page_icon="📦" # Un icono para la pestaña
+    page_icon="📦"
 )
 
 st.title("📦 Extraer Referencias de I-Construye desde Excel")
 st.markdown("---")
 
-# Diccionario de reemplazos para normalizar texto en columna base
+# Reemplazos para normalizar texto
 REEMPLAZOS = {
     " ": "",
     "OC:OC:": "OC",
@@ -38,7 +34,6 @@ REEMPLAZOS = {
     "Ordendecompra:0C": "Ordendecompra:OC",
 }
 
-# Funciones de procesamiento
 def reemplazar_varios(texto, reemplazos):
     for buscar, nuevo in reemplazos.items():
         if buscar in texto:
@@ -68,17 +63,7 @@ def extraer_oc(texto):
         return []
     return re.findall(r"(OC-\d{2,8})", texto)
 
-def guardar_en_base(df, nombre_tabla="facturas_extraidas", base_datos="facturas.db"):
-    try:
-        conn = sqlite3.connect(base_datos)
-        conn.execute(f"DROP TABLE IF EXISTS {nombre_tabla}") # Esto borrará la tabla cada vez que se guarde
-        df.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
-        conn.close()
-        st.info(f"📦 Datos guardados en la base '{base_datos}', tabla '{nombre_tabla}'.")
-    except Exception as e:
-        st.error(f"❌ Error al guardar en base de datos: {e}")
-
-# Widget para cargar archivo Excel
+# Cargar archivo
 archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
 
 if archivo:
@@ -97,21 +82,18 @@ if archivo:
         else:
             return "Otro"
 
-    # Asegúrate de que la columna 1 exista
     if df.shape[1] > 1:
         df["Tipo Documento"] = df.iloc[:, 1].apply(detectar_tipo_documento)
     else:
-        st.error("❌ El archivo Excel no tiene suficientes columnas. Se espera al menos la columna para 'Tipo Documento'.")
-        st.stop() # Detiene la ejecución si la columna no existe
+        st.error("❌ El archivo Excel no tiene suficientes columnas.")
+        st.stop()
 
-    # Asegúrate de que la columna 18 exista
     if df.shape[1] > 18:
         col_base = df.columns[18]
         df[col_base] = df[col_base].apply(lambda x: reemplazar_varios(x, REEMPLAZOS) if isinstance(x, str) else x)
     else:
-        st.error("❌ El archivo Excel no tiene suficientes columnas. Se espera al menos la columna 19 (índice 18) para la columna base.")
-        st.stop() # Detiene la ejecución si la columna no existe
-
+        st.error("❌ El archivo Excel no tiene suficientes columnas (19 esperadas).")
+        st.stop()
 
     filas_expandidas = []
 
@@ -180,20 +162,48 @@ if archivo:
     st.success("✅ Archivo procesado correctamente.")
     st.dataframe(df_expandido.head(20), use_container_width=True)
 
-    guardar_en_base(df_expandido)
+    # Crear dataframes separados
+    df_facturas = df_expandido[df_expandido["Tipo Documento"] == "Factura"]
+    df_guias = df_expandido[df_expandido["Tipo Documento"] == "Guía"]
+    df_ncnd = df_expandido[df_expandido["Tipo Documento"] == "NC/ND"]
 
+    # Crear DataFrame sin duplicar con columnas extraídas
+    df_sin_duplicar = df.copy()
+    df_sin_duplicar["Guía Extraída"] = df["Guía Extraída"] if "Guía Extraída" in df else ""
+    df_sin_duplicar["Ref NC/ND Extraída"] = df["Ref NC/ND Extraída"] if "Ref NC/ND Extraída" in df else ""
+    df_sin_duplicar["OC Extraída"] = df["OC Extraída"] if "OC Extraída" in df else ""
+
+    # Guardar todas las tablas en base de datos
+    try:
+        conn = sqlite3.connect("facturas.db")
+        df_expandido.to_sql("facturas_extraidas", conn, if_exists="replace", index=False)
+        df_facturas.to_sql("solo_facturas", conn, if_exists="replace", index=False)
+        df_guias.to_sql("solo_guias", conn, if_exists="replace", index=False)
+        df_ncnd.to_sql("solo_nc_nd", conn, if_exists="replace", index=False)
+        df_sin_duplicar.to_sql("sin_duplicar", conn, if_exists="replace", index=False)
+        conn.close()
+        st.success("🗃️ Todas las tablas fueron guardadas correctamente en la base de datos.")
+    except Exception as e:
+        st.error(f"❌ Error al guardar en base de datos: {e}")
+
+    # Crear Excel multi-hoja
     buffer = BytesIO()
-    df_expandido.to_excel(buffer, index=False)
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df_expandido.to_excel(writer, sheet_name="Procesado", index=False)
+        df_facturas.to_excel(writer, sheet_name="Facturas", index=False)
+        df_guias.to_excel(writer, sheet_name="Guias", index=False)
+        df_ncnd.to_excel(writer, sheet_name="NC_ND", index=False)
+        df_sin_duplicar.to_excel(writer, sheet_name="Sin Duplicar", index=False)
     buffer.seek(0)
+
     st.download_button(
-        label="📥 Descargar archivo procesado",
+        label="📥 Descargar Excel con hojas separadas",
         data=buffer,
-        file_name="resultado_extraccion.xlsx",
+        file_name="extraccion_referencias.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 st.markdown("---")
-
 st.subheader("📄 Instrucciones a considerar para el procesamiento de Excel:")
 st.success("Procura habilitar el archivo Excel descargado desde I-Construye antes de subirlo.")
 
@@ -205,13 +215,9 @@ with col2:
     st.image("src/assets/images/Numero_2.png", caption="Paso 2", use_container_width=True)
     st.info("Presiona HABILITAR en la parte superior del Excel")
 with col3:
-    # Asegúrate de que la ruta de la imagen sea correcta
     imagen = Image.open("src/assets/images/Numero_3.png")
     st.image(imagen, caption="Paso 3", use_container_width=True)
     st.info("Guarda el archivo una vez habilitado con Ctrl + G y ciérralo")
+
 st.markdown("---")
 st.info("Utiliza la barra lateral para navegar a las diferentes secciones de la aplicación.")
-
-# Ya no necesitas este botón porque Streamlit creará automáticamente la navegación
-# if st.button("🔍 Ver Base de Datos"):
-#     st.switch_page("pages/2_ver_base_datos.py") # Asegúrate de que la ruta sea correcta si la mantienes
