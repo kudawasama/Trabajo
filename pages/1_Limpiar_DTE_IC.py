@@ -1,10 +1,14 @@
-# pages/1_Limpiar_DTE_IC.py
 import streamlit as st
 import pandas as pd
-import re 
+import re
 import sqlite3
 from io import BytesIO
 from PIL import Image
+
+# Verifica si hay sesión activa
+if "usuario" not in st.session_state:
+    st.warning("🔐 Debes iniciar sesión para acceder a esta página.")
+    st.stop()
 
 st.set_page_config(
     page_title="Extraer Referencias",
@@ -15,7 +19,6 @@ st.set_page_config(
 st.title("📦 Extraer Referencias de I-Construye desde Excel")
 st.markdown("---")
 
-# Reemplazos para normalizar texto
 REEMPLAZOS = {
     " ": "",
     "OC:OC:": "OC",
@@ -63,7 +66,6 @@ def extraer_oc(texto):
         return []
     return re.findall(r"(OC-\d{2,8})", texto)
 
-# Cargar archivo
 archivo = st.file_uploader("📁 Sube tu archivo Excel (.xlsx)", type="xlsx")
 
 if archivo:
@@ -162,46 +164,71 @@ if archivo:
     st.success("✅ Archivo procesado correctamente.")
     st.dataframe(df_expandido.head(20), use_container_width=True)
 
-    # Crear dataframes separados
     df_facturas = df_expandido[df_expandido["Tipo Documento"] == "Factura"]
     df_guias = df_expandido[df_expandido["Tipo Documento"] == "Guía"]
     df_ncnd = df_expandido[df_expandido["Tipo Documento"] == "NC/ND"]
 
-    # Crear DataFrame sin duplicar con columnas extraídas
     df_sin_duplicar = df.copy()
     df_sin_duplicar["Guía Extraída"] = df["Guía Extraída"] if "Guía Extraída" in df else ""
     df_sin_duplicar["Ref NC/ND Extraída"] = df["Ref NC/ND Extraída"] if "Ref NC/ND Extraída" in df else ""
     df_sin_duplicar["OC Extraída"] = df["OC Extraída"] if "OC Extraída" in df else ""
 
-    # Guardar todas las tablas en base de datos
-    try:
-        conn = sqlite3.connect("facturas.db")
-        df_expandido.to_sql("facturas_extraidas", conn, if_exists="replace", index=False)
-        df_facturas.to_sql("solo_facturas", conn, if_exists="replace", index=False)
-        df_guias.to_sql("solo_guias", conn, if_exists="replace", index=False)
-        df_ncnd.to_sql("solo_nc_nd", conn, if_exists="replace", index=False)
-        df_sin_duplicar.to_sql("sin_duplicar", conn, if_exists="replace", index=False)
-        conn.close()
-        st.success("🗃️ Todas las tablas fueron guardadas correctamente en la base de datos.")
-    except Exception as e:
-        st.error(f"❌ Error al guardar en base de datos: {e}")
+    # Guardar cada DataFrame en su propio archivo SQLite
+    def guardar_en_sqlite(df_guardar, nombre_archivo, nombre_tabla):
+        try:
+            conn = sqlite3.connect(nombre_archivo)
+            df_guardar.to_sql(nombre_tabla, conn, if_exists="replace", index=False)
+            conn.close()
+            return True
+        except Exception as e:
+            st.error(f"Error al guardar en {nombre_archivo}: {e}")
+            return False
 
-    # Crear Excel multi-hoja
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df_expandido.to_excel(writer, sheet_name="Procesado", index=False)
-        df_facturas.to_excel(writer, sheet_name="Facturas", index=False)
-        df_guias.to_excel(writer, sheet_name="Guias", index=False)
-        df_ncnd.to_excel(writer, sheet_name="NC_ND", index=False)
-        df_sin_duplicar.to_excel(writer, sheet_name="Sin Duplicar", index=False)
-    buffer.seek(0)
+    ok1 = guardar_en_sqlite(df_expandido, "procesado.db", "procesado")
+    ok2 = guardar_en_sqlite(df_facturas, "facturas.db", "facturas")
+    ok3 = guardar_en_sqlite(df_guias, "guias.db", "guias")
+    ok4 = guardar_en_sqlite(df_ncnd, "nc_nd.db", "nc_nd")
+    ok5 = guardar_en_sqlite(df_sin_duplicar, "sin_duplicar.db", "sin_duplicar")
 
-    st.download_button(
-        label="📥 Descargar Excel con hojas separadas",
-        data=buffer,
-        file_name="extraccion_referencias.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    if all([ok1, ok2, ok3, ok4, ok5]):
+        st.success("🗃️ Todos los archivos SQLite fueron guardados correctamente.")
+    else:
+        st.error("❌ Hubo errores guardando los archivos SQLite.")
+
+    st.markdown("---")
+    st.subheader("📥 Exportar Excel personalizado")
+
+    # Checkbox para elegir qué hojas incluir
+    incluir_procesado = st.checkbox("Procesado", value=True)
+    incluir_facturas = st.checkbox("Facturas", value=True)
+    incluir_guias = st.checkbox("Guias", value=True)
+    incluir_ncnd = st.checkbox("NC_ND", value=True)
+    incluir_sin_duplicar = st.checkbox("Sin Duplicar", value=True)
+
+    def exportar_excel_personalizado():
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            if incluir_procesado:
+                df_expandido.to_excel(writer, sheet_name="Procesado", index=False)
+            if incluir_facturas:
+                df_facturas.to_excel(writer, sheet_name="Facturas", index=False)
+            if incluir_guias:
+                df_guias.to_excel(writer, sheet_name="Guias", index=False)
+            if incluir_ncnd:
+                df_ncnd.to_excel(writer, sheet_name="NC_ND", index=False)
+            if incluir_sin_duplicar:
+                df_sin_duplicar.to_excel(writer, sheet_name="Sin Duplicar", index=False)
+        return output.getvalue()
+
+    if st.button("📥 Descargar Excel con hojas seleccionadas"):
+        data_excel = exportar_excel_personalizado()
+        st.download_button(
+            label="Descargar archivo Excel",
+            data=data_excel,
+            file_name="extraccion_referencias_personalizado.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="descarga_excel"
+        )
 
 st.markdown("---")
 st.subheader("📄 Instrucciones a considerar para el procesamiento de Excel:")
