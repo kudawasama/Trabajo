@@ -1,6 +1,7 @@
 # Ignorar base de datos
 facturas.db
 *.db
+!basedatos/*.db
 
 # Ignorar carpetas de entorno virtual
 venv/
