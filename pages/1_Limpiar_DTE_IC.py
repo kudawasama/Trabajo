@@ -32,7 +32,7 @@ try:
     b64 = base64.b64encode(archivo_plantilla).decode()
 
     # Crear el HTML con link para descargar
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="/workspaces/Trabajo/planilla_limpiar_dte.xlsx" style="float:right;">📥 Descargar plantilla base Excel</a>'
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="planilla_limpiar_dte.xlsx" style="float:right;">📥 Descargar plantilla base Excel</a>'
 
     # Mostrar el link justo después del título, con estilo flotante a la derecha
     st.markdown(href, unsafe_allow_html=True)
