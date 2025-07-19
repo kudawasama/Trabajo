@@ -1,62 +1,87 @@
-# Inicio.py
 import streamlit as st
-from PIL import Image # Importar Image para las imágenes de instrucciones
+from PIL import Image
+import os
+import datetime
 
-import streamlit as st
-
-# === Diccionario de usuarios (puedes cambiar esto o cargar desde archivo) ===
+# === Diccionario de usuarios (ajusta según tu necesidad) ===
 USUARIOS = {
     "jose.cespedes@casinoexpress.cl": {"password": "Ceco026_", "rol": "admin"},
     "aa": {"password": "aa", "rol": "admin"},
     "usuario@ejemplo.com": {"password": "usuario123", "rol": "usuario"},
 }
 
+# Inicializar estado
+if "usuario" not in st.session_state:
+    st.session_state.usuario = None
+if "rol" not in st.session_state:
+    st.session_state.rol = None
+if "logueado" not in st.session_state:
+    st.session_state.logueado = False
+
+# === Función Login ===
 def login():
-    st.markdown("### 🔐 Inicio de sesión")
+    st.markdown("### 🔐 Iniciar sesión")
     correo = st.text_input("Correo electrónico")
     clave = st.text_input("Contraseña", type="password")
+
     if st.button("Iniciar sesión"):
         if correo in USUARIOS and clave == USUARIOS[correo]["password"]:
-            st.success(f"✅ Bienvenido: {correo}")
-            st.session_state["usuario"] = correo
-            st.session_state["rol"] = USUARIOS[correo]["rol"]
-            st.rerun()
+            st.session_state.usuario = correo
+            st.session_state.rol = USUARIOS[correo]["rol"]
+            st.session_state.logueado = True
+            st.success(f"Bienvenido, {correo}")
+            st.toast("Inicio de sesión exitoso", icon="✅")
+            st.query_params["logged"] = "1"
+            st.rerun()  # ✅ Refresca inmediatamente para ir a la vista de usuarioo
         else:
-            st.error("❌ Usuario o contraseña incorrectos")
+            st.error("Correo o contraseña incorrectos")
 
-# Si no está logueado, muestra login
-if "usuario" not in st.session_state:
+# === Función Logout ===
+def logout():
+    st.session_state.usuario = None
+    st.session_state.rol = None
+    st.session_state.logueado = False
+    st.query_params.clear()
+    st.rerun()  # ✅ Refresca para mostrar la vista de login inmediatamente
+
+
+# === Configuración inicial ===
+st.set_page_config(page_title="Simple by Jose", layout="wide", page_icon="🏠")
+
+# === Mostrar logout si está logueado ===
+if st.session_state.logueado:
+    with st.sidebar:
+        st.markdown("---")
+        st.caption(f"👤 Usuario: `{st.session_state.usuario}`")
+        if st.button("Cerrar sesión"):
+            logout()
+            st.success("Sesión cerrada correctamente")
+            st.stop()
+
+# === Lógica de navegación ===
+if not st.session_state.logueado:
     login()
     st.stop()
 
-
-st.set_page_config(
-    page_title="Simple by Jose",
-    layout="wide",
-    page_icon="🏠" # Opcional: un icono para la pestaña del navegador
-)
-
+# === Página principal ===
 st.title("Bienvenido a la Aplicación de Costos Privado 🛸")
 st.markdown("---")
 
+# === Mostrar estado de la base ===
+BASE_DATOS_PATH = "facturas.db"
+
+if os.path.exists(BASE_DATOS_PATH):
+    modificado = os.path.getmtime(BASE_DATOS_PATH)
+    fecha_hora = datetime.datetime.fromtimestamp(modificado).strftime("%d/%m/%Y a las %H:%M:%S")
+    st.success(f"📦 Base de datos actualizada el **{fecha_hora}**.")
+else:
+    st.warning("⚠️ No se encontró la base de datos.")
+
 st.subheader("🚀 Funcionalidades:")
-st.write("""
-Esta aplicación te permite:
-- **Extraer referencias de I-Construye desde archivos Excel** y normalizar datos.
-- **Visualizar la base de datos** de las referencias extraídas.
-- **Validar estado de recepciones** reproceso del archivo.
+st.markdown("""
+- **Extrae datos desde Excel de I-Construye** y los normaliza.
+- **Consulta la base de datos** cargada.
+- **Valida relaciones entre documentos** y referencias.
 """)
 
-st.markdown("---")
-
-
-st.markdown("---")
-st.info("Utiliza la barra lateral para navegar a las diferentes secciones de la aplicación.")
-
-# Los botones de navegación directa (st.switch_page) se eliminan/comentan
-# porque la navegación principal es a través de la barra lateral.
-# if st.button("Ir a Procesar Excel"):
-#     st.switch_page("pages/1_Limpiar_DTE_IC.py")
-
-# if st.button("🔍 Ver Base de Datos (Acceso Rápido)"):
-#     st.switch_page("pages/2_ver_base_datos.py")
+st.info("Usa el menú lateral izquierdo para navegar entre las secciones.")

@@ -220,7 +220,7 @@ if archivo:
                 df_sin_duplicar.to_excel(writer, sheet_name="Sin Duplicar", index=False)
         return output.getvalue()
 
-    if st.button("📥 Descargar Excel con hojas seleccionadas"):
+    if st.button("📥 Selecciona lo deseado"):
         data_excel = exportar_excel_personalizado()
         st.download_button(
             label="Descargar archivo Excel",
