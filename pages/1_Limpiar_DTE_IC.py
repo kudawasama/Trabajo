@@ -293,7 +293,7 @@ with st.sidebar:
         ">
             Hecho por <strong>José Cortés</strong><br>
             📧 jose.cespedes@casinoexpress.cl<br>
-            💻 v1.0 - 2025
+            💻 v1.0 - 19-07-2025
         </div>
         """,
         unsafe_allow_html=True
