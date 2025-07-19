@@ -85,3 +85,31 @@ st.markdown("""
 """)
 
 st.info("Usa el menú lateral izquierdo para navegar entre las secciones.")
+
+with st.sidebar:
+    st.markdown("---")
+
+    # Contenido principal de la sidebar aquí (menús, filtros, etc.)
+
+    # Espaciador invisible para empujar el contenido hacia abajo
+    st.markdown("<div style='height:400px;'></div>", unsafe_allow_html=True)
+
+    # Firma fija abajo de la sidebar
+    st.markdown(
+        """
+        <div style="
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 13px;
+            color: gray;
+        ">
+            Hecho por <strong>José Cortés</strong><br>
+            📧 jose.cespedes@casinoexpress.cl<br>
+            💻 v1.0 - 2025
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+

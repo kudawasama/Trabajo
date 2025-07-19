@@ -4,6 +4,7 @@ import re
 import sqlite3
 from io import BytesIO
 from PIL import Image
+import base64
 
 # Verifica si hay sesión activa
 if "usuario" not in st.session_state:
@@ -18,6 +19,27 @@ st.set_page_config(
 
 st.title("📦 Extraer Referencias de I-Construye desde Excel")
 st.markdown("---")
+
+# Ruta o nombre de tu archivo plantilla en el servidor
+RUTA_PLANTILLA = "/workspaces/Trabajo/planilla_limpiar_dte.xlsx"
+
+try:
+    # Leer el archivo plantilla en modo binario
+    with open(RUTA_PLANTILLA, "rb") as file:
+        archivo_plantilla = file.read()
+
+    # Codificar el archivo en base64 para crear un link descargable
+    b64 = base64.b64encode(archivo_plantilla).decode()
+
+    # Crear el HTML con link para descargar
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="/workspaces/Trabajo/planilla_limpiar_dte.xlsx" style="float:right;">📥 Descargar plantilla base Excel</a>'
+
+    # Mostrar el link justo después del título, con estilo flotante a la derecha
+    st.markdown(href, unsafe_allow_html=True)
+
+except Exception as e:
+    st.error(f"Error al cargar la plantilla para descargar: {e}")
+
 
 REEMPLAZOS = {
     " ": "",
@@ -184,11 +206,11 @@ if archivo:
             st.error(f"Error al guardar en {nombre_archivo}: {e}")
             return False
 
-    ok1 = guardar_en_sqlite(df_expandido, "procesado.db", "procesado")
-    ok2 = guardar_en_sqlite(df_facturas, "facturas.db", "facturas")
-    ok3 = guardar_en_sqlite(df_guias, "guias.db", "guias")
-    ok4 = guardar_en_sqlite(df_ncnd, "nc_nd.db", "nc_nd")
-    ok5 = guardar_en_sqlite(df_sin_duplicar, "sin_duplicar.db", "sin_duplicar")
+    ok1 = guardar_en_sqlite(df_expandido, "BaseDatos/procesado.db", "procesado")
+    ok2 = guardar_en_sqlite(df_facturas, "BaseDatos/facturas.db", "facturas")
+    ok3 = guardar_en_sqlite(df_guias, "BaseDatos/guias.db", "guias")
+    ok4 = guardar_en_sqlite(df_ncnd, "BaseDatos/nc_nd.db", "nc_nd")
+    ok5 = guardar_en_sqlite(df_sin_duplicar, "BaseDatos/sin_duplicar.db", "sin_duplicar")
 
     if all([ok1, ok2, ok3, ok4, ok5]):
         st.success("🗃️ Todos los archivos SQLite fueron guardados correctamente.")
@@ -220,7 +242,7 @@ if archivo:
                 df_sin_duplicar.to_excel(writer, sheet_name="Sin Duplicar", index=False)
         return output.getvalue()
 
-    if st.button("📥 Selecciona lo deseado"):
+    if st.button("📥 Confirma y genera el archivo"):
         data_excel = exportar_excel_personalizado()
         st.download_button(
             label="Descargar archivo Excel",
@@ -248,3 +270,35 @@ with col3:
 
 st.markdown("---")
 st.info("Utiliza la barra lateral para navegar a las diferentes secciones de la aplicación.")
+
+
+
+with st.sidebar:
+    st.markdown("---")
+
+    # Contenido principal de la sidebar aquí (menús, filtros, etc.)
+
+    # Espaciador invisible para empujar el contenido hacia abajo
+    st.markdown("<div style='height:550px;'></div>", unsafe_allow_html=True)
+
+    # Firma fija abajo de la sidebar
+    st.markdown(
+        """
+        <div style="
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 13px;
+            color: gray;
+        ">
+            Hecho por <strong>José Cortés</strong><br>
+            📧 jose.cespedes@casinoexpress.cl<br>
+            💻 v1.0 - 2025
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+    
+
