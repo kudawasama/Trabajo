@@ -21,7 +21,7 @@ st.title("📦 Extraer Referencias de I-Construye desde Excel")
 st.markdown("---")
 
 # Ruta o nombre de tu archivo plantilla en el servidor
-RUTA_PLANTILLA = "/workspaces/Trabajo/planilla_limpiar_dte.xlsx"
+RUTA_PLANTILLA = "planilla_limpiar_dte.xlsx"
 
 try:
     # Leer el archivo plantilla en modo binario
